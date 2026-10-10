@@ -24,7 +24,7 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let database_url = env::var("DATABASE_URL").map_err(|_| "missing DATABASE_URL")?;
+    let database_url = with_host(&env::var("DATABASE_URL").map_err(|_| "missing DATABASE_URL")?);
     let jwt_secret = env::var("JWT_SECRET").map_err(|_| "missing JWT_SECRET")?;
     // Cloud Run tells the container which port to listen on through PORT.
     let address = match env::var("PORT") {
@@ -70,4 +70,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("API listening on http://{}", listener.local_addr()?);
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+// Cloud SQL socket URLs leave the host empty (postgres://user:pass@/db?host=/cloudsql/...).
+// sqlx needs a host to parse the URL; the host query parameter still selects the socket.
+fn with_host(database_url: &str) -> String {
+    database_url.replacen("@/", "@localhost/", 1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::with_host;
+    use sqlx::postgres::PgConnectOptions;
+    use std::{path::PathBuf, str::FromStr};
+
+    #[test]
+    fn cloud_sql_socket_urls_connect_through_the_socket() {
+        let url =
+            with_host("postgres://api:secret@/parallel?host=/cloudsql/project:region:instance");
+        let options = PgConnectOptions::from_str(&url).unwrap();
+        assert_eq!(
+            options.get_socket(),
+            Some(&PathBuf::from("/cloudsql/project:region:instance"))
+        );
+        assert_eq!(options.get_database(), Some("parallel"));
+    }
+
+    #[test]
+    fn regular_urls_are_not_changed() {
+        let url = "postgres://user:pass@db:5432/app";
+        assert_eq!(with_host(url), url);
+    }
 }
