@@ -294,9 +294,11 @@ resource "google_api_gateway_gateway" "api" {
 }
 
 # Each API Gateway API is a managed service that must be enabled in the project.
+# It only exists after the first API config is created.
 resource "google_project_service" "gateway_managed_service" {
   service            = google_api_gateway_api.api.managed_service
   disable_on_destroy = false
+  depends_on         = [google_api_gateway_api_config.api]
 }
 
 # Cloud Logging: counts the API's 5xx responses from the Cloud Run request logs.
