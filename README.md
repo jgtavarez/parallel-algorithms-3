@@ -75,3 +75,4 @@ export TF_VAR_project_id=$PROJECT_ID TF_VAR_region=us-central1 \
 terraform init -backend-config="bucket=${PROJECT_ID}-tfstate"
 terraform destroy
 ```
+# parallel-algorithms-3
