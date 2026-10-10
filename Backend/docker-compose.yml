@@ -1,4 +1,4 @@
-name: integrador-cloud
+name: parallel-local
 
 services:
   db:

@@ -1,4 +1,4 @@
-# Integrador · Despliegue serverless en GCP
+# Algoritmos Paralelos · Despliegue serverless en GCP
 
 ```
 Mobile App (Flutter)
@@ -34,10 +34,10 @@ El estado de Terraform se guarda en el bucket `<proyecto>-tfstate`, que el pipel
 | `GCP_PROJECT_ID` | ID del proyecto de GCP |
 | `GCP_REGION` | Región, por ejemplo `us-central1` |
 | `GCP_SA_KEY` | JSON de la llave de la cuenta de servicio del pipeline |
-| `DATABASE_URL` | `postgres://api:CLAVE@/integrador?host=/cloudsql/PROYECTO:REGION:integrador-db` |
+| `DATABASE_URL` | `postgres://api:CLAVE@/parallel?host=/cloudsql/PROYECTO:REGION:parallel-db` |
 | `JWT_SECRET` | Texto aleatorio largo |
-| `ARTIFACT_REGISTRY` | Opcional. Nombre del repositorio de imágenes (por defecto `integrador`) |
-| `CLOUD_RUN_SERVICE` | Opcional. Nombre del servicio (por defecto `integrador-api`) |
+| `ARTIFACT_REGISTRY` | Opcional. Nombre del repositorio de imágenes (por defecto `parallel`) |
+| `CLOUD_RUN_SERVICE` | Opcional. Nombre del servicio (por defecto `parallel-api`) |
 
 Terraform toma el usuario, la contraseña y la base de datos de `DATABASE_URL` para crearlos en Cloud SQL, y guarda la URL en Secret Manager. Usar solo letras y números en la contraseña.
 
@@ -61,7 +61,7 @@ Usar la URL de API Gateway (`terraform output gateway_url`):
 
 ```bash
 cd Mobile
-flutter run --dart-define=API_URL=https://integrador-gateway-xxxx.uc.gateway.dev
+flutter run --dart-define=API_URL=https://parallel-gateway-xxxx.uc.gateway.dev
 ```
 
 ## Borrar todo

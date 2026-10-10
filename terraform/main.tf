@@ -257,14 +257,14 @@ resource "google_cloud_run_v2_service_iam_member" "gateway_invoker" {
 
 resource "google_api_gateway_api" "api" {
   provider   = google-beta
-  api_id     = "integrador-api"
+  api_id     = "parallel-api"
   depends_on = [google_project_service.apis]
 }
 
 resource "google_api_gateway_api_config" "api" {
   provider             = google-beta
   api                  = google_api_gateway_api.api.api_id
-  api_config_id_prefix = "integrador-"
+  api_config_id_prefix = "parallel-"
 
   openapi_documents {
     document {
@@ -289,7 +289,7 @@ resource "google_api_gateway_api_config" "api" {
 resource "google_api_gateway_gateway" "api" {
   provider   = google-beta
   region     = var.region
-  gateway_id = "integrador-gateway"
+  gateway_id = "parallel-gateway"
   api_config = google_api_gateway_api_config.api.id
 }
 
@@ -302,7 +302,7 @@ resource "google_project_service" "gateway_managed_service" {
 # Cloud Logging: counts the API's 5xx responses from the Cloud Run request logs.
 
 resource "google_logging_metric" "api_errors" {
-  name   = "integrador-api-5xx"
+  name   = "parallel-api-5xx"
   filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${var.service_name}\" AND httpRequest.status>=500"
 
   metric_descriptor {

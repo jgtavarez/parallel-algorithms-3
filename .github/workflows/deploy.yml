@@ -8,8 +8,8 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: ${{ secrets.GCP_REGION }}
-  REPOSITORY: ${{ secrets.ARTIFACT_REGISTRY || 'integrador' }}
-  SERVICE: ${{ secrets.CLOUD_RUN_SERVICE || 'integrador-api' }}
+  REPOSITORY: ${{ secrets.ARTIFACT_REGISTRY || 'parallel' }}
+  SERVICE: ${{ secrets.CLOUD_RUN_SERVICE || 'parallel-api' }}
 
 jobs:
   backend:
@@ -49,8 +49,8 @@ jobs:
       TF_VAR_region: ${{ secrets.GCP_REGION }}
       TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
       TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
-      TF_VAR_repository_id: ${{ secrets.ARTIFACT_REGISTRY || 'integrador' }}
-      TF_VAR_service_name: ${{ secrets.CLOUD_RUN_SERVICE || 'integrador-api' }}
+      TF_VAR_repository_id: ${{ secrets.ARTIFACT_REGISTRY || 'parallel' }}
+      TF_VAR_service_name: ${{ secrets.CLOUD_RUN_SERVICE || 'parallel-api' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -88,7 +88,7 @@ jobs:
       run:
         working-directory: Backend
     env:
-      IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY || 'integrador' }}/api:${{ github.sha }}
+      IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY || 'parallel' }}/api:${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
 

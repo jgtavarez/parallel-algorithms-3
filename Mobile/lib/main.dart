@@ -40,7 +40,7 @@ class App extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = context.watch<AuthViewModel>().status;
     return MaterialApp(
-      title: 'Integrador',
+      title: 'Algoritmos Paralelos',
       theme: ThemeData(colorSchemeSeed: Colors.indigo),
       home: switch (status) {
         AuthStatus.unknown => const Scaffold(

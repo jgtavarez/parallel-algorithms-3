@@ -18,5 +18,5 @@ flutter run --dart-define=API_URL=http://192.168.1.50:3000
 Con el backend desplegado en GCP, usar la URL de API Gateway:
 
 ```bash
-flutter run --dart-define=API_URL=https://integrador-gateway-xxxx.uc.gateway.dev
+flutter run --dart-define=API_URL=https://parallel-gateway-xxxx.uc.gateway.dev
 ```

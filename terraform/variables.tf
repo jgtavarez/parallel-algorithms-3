@@ -27,17 +27,17 @@ variable "jwt_secret" {
 
 variable "service_name" {
   type    = string
-  default = "integrador-api"
+  default = "parallel-api"
 }
 
 variable "repository_id" {
   type    = string
-  default = "integrador"
+  default = "parallel"
 }
 
 variable "db_instance_name" {
   type    = string
-  default = "integrador-db"
+  default = "parallel-db"
 }
 
 variable "db_tier" {
