@@ -1,4 +1,4 @@
-# Algoritmos Paralelos · Despliegue serverless en GCP
+# Algoritmos Paralelos · Despliegue serverless en GCP.
 
 ```
 Mobile App (Flutter)
