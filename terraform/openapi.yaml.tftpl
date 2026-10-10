@@ -1,0 +1,102 @@
+swagger: "2.0"
+info:
+  title: integrador-api
+  version: "1.0.0"
+schemes:
+  - https
+produces:
+  - application/json
+x-google-backend:
+  address: ${backend_url}
+  path_translation: APPEND_PATH_TO_ADDRESS
+  deadline: 60.0
+paths:
+  /register:
+    post:
+      operationId: register
+      responses:
+        "201":
+          description: Cuenta creada
+  /login:
+    post:
+      operationId: login
+      responses:
+        "200":
+          description: Sesión iniciada
+  /profile:
+    get:
+      operationId: getProfile
+      responses:
+        "200":
+          description: Usuario actual
+  /stats:
+    get:
+      operationId: getStats
+      responses:
+        "200":
+          description: Totales
+  /users:
+    get:
+      operationId: listUsers
+      responses:
+        "200":
+          description: Usuarios
+    post:
+      operationId: createUser
+      responses:
+        "201":
+          description: Usuario creado
+  /users/{id}:
+    get:
+      operationId: getUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: integer
+      responses:
+        "200":
+          description: Usuario
+    put:
+      operationId: updateUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: integer
+      responses:
+        "200":
+          description: Usuario actualizado
+    delete:
+      operationId: deleteUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: integer
+      responses:
+        "204":
+          description: Usuario eliminado
+  /files:
+    get:
+      operationId: listFiles
+      responses:
+        "200":
+          description: Archivos del usuario
+  /upload:
+    post:
+      operationId: uploadFile
+      responses:
+        "201":
+          description: Archivo subido
+  /upload/{id}:
+    delete:
+      operationId: deleteFile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          type: integer
+      responses:
+        "204":
+          description: Archivo eliminado
