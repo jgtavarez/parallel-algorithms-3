@@ -1,0 +1,110 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: ${{ secrets.GCP_REGION }}
+  REPOSITORY: ${{ secrets.ARTIFACT_REGISTRY || 'integrador' }}
+  SERVICE: ${{ secrets.CLOUD_RUN_SERVICE || 'integrador-api' }}
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: Backend
+
+      - name: Install dependencies
+        run: cargo fetch --locked
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Docker Build
+        run: docker build -t api:${{ github.sha }} .
+
+  terraform:
+    name: Terraform
+    needs: backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    env:
+      TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+      TF_VAR_region: ${{ secrets.GCP_REGION }}
+      TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
+      TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+      TF_VAR_repository_id: ${{ secrets.ARTIFACT_REGISTRY || 'integrador' }}
+      TF_VAR_service_name: ${{ secrets.CLOUD_RUN_SERVICE || 'integrador-api' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      # Terraform keeps its state in this bucket between runs.
+      - name: Create state bucket
+        run: |
+          gcloud storage buckets describe "gs://${PROJECT_ID}-tfstate" >/dev/null 2>&1 ||
+            gcloud storage buckets create "gs://${PROJECT_ID}-tfstate" --location="$REGION" --uniform-bucket-level-access
+
+      - uses: hashicorp/setup-terraform@v4
+
+      - name: Terraform Init
+        run: terraform init -input=false -backend-config="bucket=${PROJECT_ID}-tfstate"
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -input=false -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform apply -input=false -auto-approve tfplan
+
+  deploy:
+    name: Deploy
+    needs: terraform
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Backend
+    env:
+      IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY || 'integrador' }}/api:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      # Cloud Build builds the image in GCP and publishes it to Artifact Registry.
+      - name: Push Artifact Registry
+        run: |
+          gcloud builds submit . \
+            --config=cloudbuild.yaml \
+            --substitutions="_IMAGE=${IMAGE}" \
+            --service-account="projects/${PROJECT_ID}/serviceAccounts/cloud-build@${PROJECT_ID}.iam.gserviceaccount.com"
+
+      - name: Deploy Cloud Run
+        run: gcloud run deploy "$SERVICE" --image="$IMAGE" --region="$REGION" --quiet
