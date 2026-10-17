@@ -9,21 +9,28 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: ${{ secrets.GCP_REGION }}
   REPOSITORY: ${{ secrets.ARTIFACT_REGISTRY || 'parallel' }}
-  SERVICE: ${{ secrets.CLOUD_RUN_SERVICE || 'parallel-api' }}
 
 jobs:
-  backend:
-    name: Backend
+  # The API and the notifier are built and tested at the same time.
+  build:
+    name: Build ${{ matrix.name }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: API
+            dir: Backend
+          - name: Notifier
+            dir: Notifier
     defaults:
       run:
-        working-directory: Backend
+        working-directory: ${{ matrix.dir }}
     steps:
       - uses: actions/checkout@v7
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: Backend
+          workspaces: ${{ matrix.dir }}
 
       - name: Install dependencies
         run: cargo fetch --locked
@@ -35,11 +42,11 @@ jobs:
         run: cargo test --locked
 
       - name: Docker Build
-        run: docker build -t api:${{ github.sha }} .
+        run: docker build -t ${{ matrix.dir }}:${{ github.sha }} .
 
   terraform:
     name: Terraform
-    needs: backend
+    needs: build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -49,6 +56,8 @@ jobs:
       TF_VAR_region: ${{ secrets.GCP_REGION }}
       TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
       TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
+      TF_VAR_smtp_username: ${{ secrets.SMTP_USERNAME }}
+      TF_VAR_smtp_password: ${{ secrets.SMTP_PASSWORD }}
       TF_VAR_repository_id: ${{ secrets.ARTIFACT_REGISTRY || 'parallel' }}
       TF_VAR_service_name: ${{ secrets.CLOUD_RUN_SERVICE || 'parallel-api' }}
     steps:
@@ -80,15 +89,25 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -input=false -auto-approve tfplan
 
+  # Both Cloud Run services are built and deployed at the same time.
   deploy:
-    name: Deploy
+    name: Deploy ${{ matrix.service }}
     needs: terraform
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - dir: Backend
+            image: api
+            service: parallel-api
+          - dir: Notifier
+            image: notifier
+            service: notification-cloud-run
     defaults:
       run:
-        working-directory: Backend
+        working-directory: ${{ matrix.dir }}
     env:
-      IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY || 'parallel' }}/api:${{ github.sha }}
+      IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY || 'parallel' }}/${{ matrix.image }}:${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
 
@@ -107,4 +126,4 @@ jobs:
             --service-account="projects/${PROJECT_ID}/serviceAccounts/cloud-build@${PROJECT_ID}.iam.gserviceaccount.com"
 
       - name: Deploy Cloud Run
-        run: gcloud run deploy "$SERVICE" --image="$IMAGE" --region="$REGION" --quiet
+        run: gcloud run deploy "${{ matrix.service }}" --image="$IMAGE" --region="$REGION" --quiet

@@ -5,13 +5,19 @@ Mobile App (Flutter)
     │
 API Gateway
     │
-Cloud Run (Rust + Axum) ── Cloud Storage (archivos)
-    │
-Cloud SQL PostgreSQL
+Cloud Run parallel-api (Rust + Axum) ── Cloud Storage (archivos)
+    │                     │
+Cloud SQL PostgreSQL      │ POST /notifications/send
+                          ▼
+                     Pub/Sub (notifications)
+                          │ push
+                          ▼
+              Cloud Run notification-cloud-run ── SMTP ──▶ correo
 ```
 
 ```
 Backend/        API REST (Rust + Axum), Dockerfile y cloudbuild.yaml
+Notifier/       notification-cloud-run: recibe mensajes de Pub/Sub y envía correos por SMTP
 Mobile/         App Flutter (MVVM)
 terraform/      Infraestructura como código
 .github/        Workflow de GitHub Actions
@@ -21,9 +27,9 @@ terraform/      Infraestructura como código
 
 Cada push a `main` ejecuta `.github/workflows/deploy.yml`:
 
-1. **Backend**: dependencias, build, pruebas y `docker build`.
-2. **Terraform**: `init`, `validate`, `plan` y `apply -auto-approve`. Crea Cloud Run, API Gateway, Artifact Registry, Cloud SQL, cuentas de servicio, roles IAM, Secret Manager, el bucket de archivos y una métrica de Cloud Logging.
-3. **Deploy**: `gcloud builds submit` construye la imagen y la publica en Artifact Registry; `gcloud run deploy` la despliega en Cloud Run.
+1. **Build** (API y Notifier en paralelo): dependencias, build, pruebas y `docker build`.
+2. **Terraform**: `init`, `validate`, `plan` y `apply -auto-approve`. Crea Cloud Run, API Gateway, Artifact Registry, Cloud SQL, Pub/Sub (tema y suscripción push), el Cloud Run de notificaciones, cuentas de servicio, roles IAM, Secret Manager, el bucket de archivos y métricas de Cloud Logging.
+3. **Deploy** (los dos servicios en paralelo): `gcloud builds submit` construye cada imagen y la publica en Artifact Registry; `gcloud run deploy` la despliega en su Cloud Run.
 
 El estado de Terraform se guarda en el bucket `<proyecto>-tfstate`, que el pipeline crea si no existe.
 
@@ -36,6 +42,8 @@ El estado de Terraform se guarda en el bucket `<proyecto>-tfstate`, que el pipel
 | `GCP_SA_KEY` | JSON de la llave de la cuenta de servicio del pipeline |
 | `DATABASE_URL` | `postgres://api:CLAVE@/parallel?host=/cloudsql/PROYECTO:REGION:parallel-db` |
 | `JWT_SECRET` | Texto aleatorio largo |
+| `SMTP_USERNAME` | Cuenta que envía los correos, por ejemplo una de Gmail |
+| `SMTP_PASSWORD` | Contraseña SMTP; en Gmail, una contraseña de aplicación |
 | `ARTIFACT_REGISTRY` | Opcional. Nombre del repositorio de imágenes (por defecto `parallel`) |
 | `CLOUD_RUN_SERVICE` | Opcional. Nombre del servicio (por defecto `parallel-api`) |
 
@@ -76,3 +84,13 @@ terraform init -backend-config="bucket=${PROJECT_ID}-tfstate"
 terraform destroy
 ```
 # parallel-algorithms-3
+
+## Probar el envío de correos
+
+```bash
+curl -X POST https://<gateway>/notifications/send \
+  -H "Authorization: Bearer <JWT>" -H 'Content-Type: application/json' \
+  -d '{"email":"usuario@correo.com","subject":"Prueba PUB/SUB","message":"Hola desde GCP Serverless"}'
+```
+
+La API responde `202` con el `messageId` de Pub/Sub. El correo lo envía `notification-cloud-run`; sus logs muestran `message.received` y `email.sent` (o `email.failed`, y Pub/Sub lo reintenta).
