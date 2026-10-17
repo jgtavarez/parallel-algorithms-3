@@ -1,9 +1,8 @@
-use crate::error::{AppError, AppResult};
-use serde::Deserialize;
+use crate::{
+    error::{AppError, AppResult},
+    gcp::access_token,
+};
 use std::{env, path::PathBuf};
-
-const METADATA_TOKEN_URL: &str =
-    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
 
 // Local disk for docker compose; a Cloud Storage bucket on Cloud Run,
 // where the container's disk is lost when the instance stops.
@@ -11,11 +10,6 @@ const METADATA_TOKEN_URL: &str =
 pub enum Storage {
     Local(PathBuf),
     Bucket { name: String, http: reqwest::Client },
-}
-
-#[derive(Deserialize)]
-struct AccessToken {
-    access_token: String,
 }
 
 impl Storage {
@@ -91,19 +85,4 @@ impl Storage {
             eprintln!("could not delete {filename}: {error}");
         }
     }
-}
-
-// On Cloud Run, the metadata server returns a token for the service's own account.
-async fn access_token(http: &reqwest::Client) -> AppResult<String> {
-    let token: AccessToken = http
-        .get(METADATA_TOKEN_URL)
-        .header("Metadata-Flavor", "Google")
-        .send()
-        .await
-        .and_then(|response| response.error_for_status())
-        .map_err(AppError::internal)?
-        .json()
-        .await
-        .map_err(AppError::internal)?;
-    Ok(token.access_token)
 }

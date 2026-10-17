@@ -2,6 +2,8 @@ mod auth;
 mod dashboard;
 mod error;
 mod files;
+mod gcp;
+mod notifications;
 mod storage;
 mod users;
 
@@ -20,6 +22,9 @@ pub struct AppState {
     pub db: PgPool,
     pub jwt_secret: String,
     pub storage: Storage,
+    pub http: reqwest::Client,
+    // Full topic name: projects/<project>/topics/<topic>. Unset when running locally.
+    pub pubsub_topic: Option<String>,
 }
 
 #[tokio::main]
@@ -43,6 +48,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         db,
         jwt_secret,
         storage,
+        http: reqwest::Client::new(),
+        pubsub_topic: env::var("PUBSUB_TOPIC").ok(),
     };
 
     let mut app = Router::new()
@@ -56,6 +63,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             get(users::get).put(users::update).delete(users::delete),
         )
         .route("/files", get(files::list))
+        .route("/notifications/send", post(notifications::send))
         .route(
             "/upload",
             post(files::upload).layer(DefaultBodyLimit::max(files::MAX_SIZE + 1024 * 1024)),
