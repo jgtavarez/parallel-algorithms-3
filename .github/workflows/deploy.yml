@@ -16,12 +16,15 @@ jobs:
     name: Build ${{ matrix.name }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - name: API
             dir: Backend
+            image: api
           - name: Notifier
             dir: Notifier
+            image: notifier
     defaults:
       run:
         working-directory: ${{ matrix.dir }}
@@ -42,7 +45,7 @@ jobs:
         run: cargo test --locked
 
       - name: Docker Build
-        run: docker build -t ${{ matrix.dir }}:${{ github.sha }} .
+        run: docker build -t ${{ matrix.image }}:${{ github.sha }} .
 
   terraform:
     name: Terraform
@@ -95,6 +98,7 @@ jobs:
     needs: terraform
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - dir: Backend
