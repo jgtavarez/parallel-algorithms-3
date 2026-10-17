@@ -5,6 +5,7 @@ locals {
     "cloudbuild.googleapis.com",
     "iam.googleapis.com",
     "logging.googleapis.com",
+    "pubsub.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "servicecontrol.googleapis.com",
@@ -201,6 +202,11 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
+        name  = "PUBSUB_TOPIC"
+        value = google_pubsub_topic.notifications.id
+      }
+
+      env {
         name = "DATABASE_URL"
         value_source {
           secret_key_ref {
@@ -306,6 +312,187 @@ resource "google_project_service" "gateway_managed_service" {
 resource "google_logging_metric" "api_errors" {
   name   = "parallel-api-5xx"
   filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${var.service_name}\" AND httpRequest.status>=500"
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+# Pub/Sub: the API publishes emails here and notification-cloud-run receives them.
+
+data "google_project" "current" {}
+
+resource "google_pubsub_topic" "notifications" {
+  name       = "notifications"
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_pubsub_topic_iam_member" "api_publisher" {
+  topic  = google_pubsub_topic.notifications.id
+  role   = "roles/pubsub.publisher"
+  member = google_service_account.api.member
+}
+
+# Notification Cloud Run
+
+resource "google_service_account" "notifier" {
+  account_id   = "notifier-runtime"
+  display_name = "notification-cloud-run"
+  depends_on   = [google_project_service.apis]
+}
+
+resource "google_project_iam_member" "notifier_logs" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = google_service_account.notifier.member
+}
+
+resource "google_secret_manager_secret" "smtp_password" {
+  secret_id = "smtp-password"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret_version" "smtp_password" {
+  secret      = google_secret_manager_secret.smtp_password.id
+  secret_data = var.smtp_password
+}
+
+resource "google_secret_manager_secret_iam_member" "notifier_smtp_password" {
+  secret_id = google_secret_manager_secret.smtp_password.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = google_service_account.notifier.member
+}
+
+resource "google_cloud_run_v2_service" "notifier" {
+  name                = var.notifier_service_name
+  location            = var.region
+  ingress             = "INGRESS_TRAFFIC_ALL"
+  deletion_protection = false
+
+  template {
+    service_account = google_service_account.notifier.email
+
+    scaling {
+      max_instance_count = 2
+    }
+
+    containers {
+      image = var.initial_image
+
+      env {
+        name  = "SMTP_HOST"
+        value = var.smtp_host
+      }
+
+      env {
+        name  = "SMTP_PORT"
+        value = tostring(var.smtp_port)
+      }
+
+      env {
+        name  = "SMTP_USERNAME"
+        value = var.smtp_username
+      }
+
+      env {
+        name = "SMTP_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.smtp_password.secret_id
+            version = "latest"
+          }
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    # The pipeline deploys each new image with gcloud run deploy.
+    ignore_changes = [template[0].containers[0].image, client, client_version]
+  }
+
+  depends_on = [
+    google_secret_manager_secret_version.smtp_password,
+    google_secret_manager_secret_iam_member.notifier_smtp_password,
+  ]
+}
+
+# Pub/Sub -> Cloud Run push subscription. Pub/Sub signs each request with
+# an OIDC token of this account, the only one allowed to invoke the service.
+
+resource "google_service_account" "pubsub_push" {
+  account_id   = "pubsub-push"
+  display_name = "Pub/Sub push to notification-cloud-run"
+  depends_on   = [google_project_service.apis]
+}
+
+resource "google_cloud_run_v2_service_iam_member" "pubsub_invoker" {
+  name     = google_cloud_run_v2_service.notifier.name
+  location = google_cloud_run_v2_service.notifier.location
+  role     = "roles/run.invoker"
+  member   = google_service_account.pubsub_push.member
+}
+
+# Lets Pub/Sub create the OIDC tokens for the push account.
+resource "google_service_account_iam_member" "pubsub_token_creator" {
+  service_account_id = google_service_account.pubsub_push.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:service-${data.google_project.current.number}@gcp-sa-pubsub.iam.gserviceaccount.com"
+}
+
+resource "google_pubsub_subscription" "notifier" {
+  name                 = "notification-cloud-run-push"
+  topic                = google_pubsub_topic.notifications.id
+  ack_deadline_seconds = 60
+
+  push_config {
+    push_endpoint = google_cloud_run_v2_service.notifier.uri
+
+    oidc_token {
+      service_account_email = google_service_account.pubsub_push.email
+      audience              = google_cloud_run_v2_service.notifier.uri
+    }
+  }
+
+  # Failed deliveries (non-2xx) are retried with a growing wait.
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
+
+  expiration_policy {
+    ttl = ""
+  }
+
+  depends_on = [
+    google_cloud_run_v2_service_iam_member.pubsub_invoker,
+    google_service_account_iam_member.pubsub_token_creator,
+  ]
+}
+
+# Cloud Logging: the notifier writes one JSON log per event.
+
+resource "google_logging_metric" "emails_sent" {
+  name   = "notification-emails-sent"
+  filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${var.notifier_service_name}\" AND jsonPayload.event=\"email.sent\""
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_logging_metric" "emails_failed" {
+  name   = "notification-emails-failed"
+  filter = "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${var.notifier_service_name}\" AND jsonPayload.event=\"email.failed\""
 
   metric_descriptor {
     metric_kind = "DELTA"

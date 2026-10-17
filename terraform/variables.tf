@@ -55,3 +55,29 @@ variable "max_instances" {
   type    = number
   default = 3
 }
+
+variable "notifier_service_name" {
+  type    = string
+  default = "notification-cloud-run"
+}
+
+variable "smtp_host" {
+  type    = string
+  default = "smtp.gmail.com"
+}
+
+variable "smtp_port" {
+  type    = number
+  default = 587
+}
+
+variable "smtp_username" {
+  type        = string
+  description = "SMTP account that sends the emails."
+}
+
+variable "smtp_password" {
+  type        = string
+  sensitive   = true
+  description = "SMTP password (for Gmail, an app password)."
+}

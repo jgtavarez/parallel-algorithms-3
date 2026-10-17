@@ -23,3 +23,12 @@ output "files_bucket" {
 output "build_service_account" {
   value = google_service_account.build.email
 }
+
+output "notifier_url" {
+  description = "Private: only the Pub/Sub push account can call it."
+  value       = google_cloud_run_v2_service.notifier.uri
+}
+
+output "pubsub_topic" {
+  value = google_pubsub_topic.notifications.id
+}
