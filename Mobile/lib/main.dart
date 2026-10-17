@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'repositories/auth_repository.dart';
 import 'repositories/dashboard_repository.dart';
 import 'repositories/file_repository.dart';
+import 'repositories/notification_repository.dart';
 import 'repositories/user_repository.dart';
 import 'services/api_service.dart';
 import 'services/session_service.dart';
@@ -23,6 +24,7 @@ void main() {
         Provider(create: (_) => UserRepository(api)),
         Provider(create: (_) => FileRepository(api)),
         Provider(create: (_) => DashboardRepository(api)),
+        Provider(create: (_) => NotificationRepository(api)),
         ChangeNotifierProvider(
           create: (_) =>
               AuthViewModel(AuthRepository(api, session))..restoreSession(),

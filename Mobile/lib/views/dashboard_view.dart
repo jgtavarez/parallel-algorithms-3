@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../repositories/file_repository.dart';
+import '../repositories/notification_repository.dart';
 import '../repositories/user_repository.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/dashboard_viewmodel.dart';
 import '../viewmodels/gallery_viewmodel.dart';
+import '../viewmodels/notification_viewmodel.dart';
 import '../viewmodels/users_viewmodel.dart';
 import 'gallery_view.dart';
+import 'send_email_view.dart';
 import 'users_view.dart';
 import 'widgets.dart';
 
@@ -164,6 +167,20 @@ class DashboardView extends StatelessWidget {
                       GalleryViewModel(context.read<FileRepository>())
                         ..loadFiles(),
                   child: const GalleryView(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            FilledButton.tonalIcon(
+              icon: const Icon(Icons.email),
+              label: const Text('Enviar correo'),
+              onPressed: () => _open(
+                context,
+                ChangeNotifierProvider(
+                  create: (context) => NotificationViewModel(
+                    context.read<NotificationRepository>(),
+                  ),
+                  child: const SendEmailView(),
                 ),
               ),
             ),
